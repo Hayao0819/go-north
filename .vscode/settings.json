@@ -1,0 +1,15 @@
+{
+    "editor.defaultFormatter": "VanCoding.vscode-treefmt-nix",
+    "editor.detectIndentation": false,
+    "editor.formatOnSave": true,
+    "editor.insertSpaces": true,
+    "editor.tabSize": 4,
+    "[go]": {
+        "editor.insertSpaces": false,
+        "editor.tabSize": 4
+    },
+    "[makefile]": {
+        "editor.insertSpaces": false,
+        "editor.tabSize": 4
+    }
+}
