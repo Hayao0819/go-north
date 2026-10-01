@@ -24,6 +24,27 @@ var (
 	ErrNotAuthenticated = errors.New("north unofficial: session is not authenticated")
 )
 
+// LoginRequirements describes the browser verification required by north.
+type LoginRequirements struct {
+	TurnstileEnabled bool   `json:"enabled"`
+	TurnstileSiteKey string `json:"siteKey"`
+}
+
+// LoginRequest contains credentials and browser verification for one login.
+type LoginRequest struct {
+	Identifier     string
+	Password       string
+	TurnstileToken string
+	StartedAt      time.Time
+	AddAccount     bool
+}
+
+// LoginResult reports whether the account requires a second login step.
+type LoginResult struct {
+	RequiresTwoFactor bool   `json:"requires2fa"`
+	TwoFactorToken    string `json:"token"`
+}
+
 // GetLoginRequirements returns the current login verification settings.
 func GetLoginRequirements(ctx context.Context, opts ...Option) (LoginRequirements, *Response, error) {
 	client, err := newLoginClient(opts...)

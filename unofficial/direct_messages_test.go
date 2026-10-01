@@ -2,6 +2,7 @@ package unofficial
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"testing"
@@ -64,6 +65,18 @@ func TestDirectMessageEndpoints(t *testing.T) {
 			return err
 		}},
 	})
+}
+
+func TestDMReactionDecodesViewerState(t *testing.T) {
+	t.Parallel()
+
+	var reaction DMReaction
+	if err := json.Unmarshal([]byte(`{"emoji":"👍","users":[{"id":"u1","handle":"alice"}],"count":1,"reactedByViewer":true}`), &reaction); err != nil {
+		t.Fatal(err)
+	}
+	if !reaction.ReactedByViewer || reaction.Count != 1 || len(reaction.Users) != 1 {
+		t.Fatalf("reaction = %#v", reaction)
+	}
 }
 
 func TestCreateDMConversationRequiresARecipient(t *testing.T) {

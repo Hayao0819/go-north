@@ -36,8 +36,15 @@ func TestIntegrationWebReadOnly(t *testing.T) {
 		t.Fatal("User returned a different account")
 	}
 
-	_, response, err = client.HomeTimeline(ctx, north.TimelineOptions{})
+	timeline, response, err := client.HomeTimeline(ctx, north.TimelineOptions{})
 	checkWebIntegrationResponse(t, "HomeTimeline", response, err)
+	if len(timeline.Items) > 0 {
+		conversation, conversationResponse, conversationErr := client.PostConversation(ctx, timeline.Items[0].ID, "")
+		checkWebIntegrationResponse(t, "PostConversation", conversationResponse, conversationErr)
+		if conversation.Tweet.ID == "" {
+			t.Fatal("PostConversation returned no post")
+		}
+	}
 
 	_, response, err = client.SearchPosts(ctx, "from:"+user.Handle, north.SearchOptions{Tab: north.SearchLatest})
 	checkWebIntegrationResponse(t, "SearchPosts", response, err)
