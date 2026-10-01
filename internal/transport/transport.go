@@ -53,9 +53,15 @@ func NormalizeBaseURL(rawURL string) (string, error) {
 	return u.String(), nil
 }
 
-// NewHTTPClient returns the default client used by both API clients.
+// NewHTTPClient returns the default client used for regular API requests.
 func NewHTTPClient() *http.Client {
 	return &http.Client{Timeout: 30 * time.Second}
+}
+
+// NewStreamingHTTPClient returns a client without a whole-request timeout.
+// Streaming requests must be bounded by their context instead.
+func NewStreamingHTTPClient() *http.Client {
+	return &http.Client{}
 }
 
 // JSONBody encodes a request body. A nil value produces no body.
@@ -75,10 +81,28 @@ func JSONBody(value any) (io.Reader, error) {
 // Do sends one request and reads its response body.
 func (c *Transport) Do(ctx context.Context, method, endpoint string, query url.Values, body io.Reader, contentType string) (Result, error) {
 	var result Result
+	response, err := c.Open(ctx, method, endpoint, query, body, contentType, "application/json")
+	if err != nil {
+		return result, err
+	}
+	defer response.Body.Close()
 
+	return ReadResponse(response)
+}
+
+// Open sends one request and leaves its response body open for the caller.
+func (c *Transport) Open(
+	ctx context.Context,
+	method string,
+	endpoint string,
+	query url.Values,
+	body io.Reader,
+	contentType string,
+	accept string,
+) (*http.Response, error) {
 	u, err := url.Parse(c.BaseURL + endpoint)
 	if err != nil {
-		return result, fmt.Errorf("build request URL: %w", err)
+		return nil, fmt.Errorf("build request URL: %w", err)
 	}
 	if len(query) > 0 {
 		u.RawQuery = query.Encode()
@@ -86,9 +110,11 @@ func (c *Transport) Do(ctx context.Context, method, endpoint string, query url.V
 
 	request, err := http.NewRequestWithContext(ctx, method, u.String(), body)
 	if err != nil {
-		return result, fmt.Errorf("build request: %w", err)
+		return nil, fmt.Errorf("build request: %w", err)
 	}
-	request.Header.Set("Accept", "application/json")
+	if accept != "" {
+		request.Header.Set("Accept", accept)
+	}
 	for name, values := range c.Header {
 		request.Header[name] = append([]string(nil), values...)
 	}
@@ -101,17 +127,23 @@ func (c *Transport) Do(ctx context.Context, method, endpoint string, query url.V
 
 	response, err := c.HTTPClient.Do(request)
 	if err != nil {
-		return result, fmt.Errorf("send request: %w", err)
+		return nil, fmt.Errorf("send request: %w", err)
 	}
-	defer response.Body.Close()
 
+	return response, nil
+}
+
+// ReadResponse reads a bounded response body. The caller must close it.
+func ReadResponse(response *http.Response) (Result, error) {
+	var result Result
 	result.StatusCode = response.StatusCode
 	result.Status = response.Status
 	result.Header = response.Header.Clone()
-	result.Body, err = io.ReadAll(io.LimitReader(response.Body, maxBodySize+1))
+	body, err := io.ReadAll(io.LimitReader(response.Body, maxBodySize+1))
 	if err != nil {
 		return result, fmt.Errorf("read response: %w", err)
 	}
+	result.Body = body
 	if len(result.Body) > maxBodySize {
 		return result, ErrResponseTooLarge
 	}

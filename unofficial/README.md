@@ -30,11 +30,10 @@ if err != nil {
 	log.Fatal(err)
 }
 
-notifications, _, err := client.Notifications(
-	ctx,
-	unofficial.NotificationsAll,
-	"",
-)
+bookmarks, _, err := client.Bookmarks(ctx, "")
+if err != nil {
+	log.Fatal(err)
+}
 ```
 
 ### ブラウザから読み取る

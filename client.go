@@ -38,9 +38,10 @@ var (
 type Option func(*clientConfig) error
 
 type clientConfig struct {
-	baseURL    string
-	httpClient *http.Client
-	userAgent  string
+	baseURL         string
+	httpClient      *http.Client
+	streamingClient *http.Client
+	userAgent       string
 }
 
 // WithBaseURL sets the API endpoint. It is useful for tests and proxies.
@@ -63,6 +64,7 @@ func WithHTTPClient(client *http.Client) Option {
 			return errors.New("north: HTTP client must not be nil")
 		}
 		cfg.httpClient = client
+		cfg.streamingClient = client
 		return nil
 	}
 }
@@ -81,7 +83,8 @@ func WithUserAgent(userAgent string) Option {
 // Client calls the north REST API. It is safe for concurrent use when its
 // underlying http.Client is safe for concurrent use.
 type Client struct {
-	transport *transport.Transport
+	transport          *transport.Transport
+	streamingTransport *transport.Transport
 }
 
 // NewClient returns a client authenticated with token.
@@ -95,9 +98,10 @@ func NewClient(token string, opts ...Option) (*Client, error) {
 	}
 
 	cfg := clientConfig{
-		baseURL:    DefaultBaseURL,
-		httpClient: transport.NewHTTPClient(),
-		userAgent:  defaultUserAgent,
+		baseURL:         DefaultBaseURL,
+		httpClient:      transport.NewHTTPClient(),
+		streamingClient: transport.NewStreamingHTTPClient(),
+		userAgent:       defaultUserAgent,
 	}
 
 	for _, opt := range opts {
@@ -112,12 +116,20 @@ func NewClient(token string, opts ...Option) (*Client, error) {
 	header := make(http.Header)
 	header.Set("Authorization", "Bearer "+token)
 
-	return &Client{transport: &transport.Transport{
-		BaseURL:    cfg.baseURL,
-		HTTPClient: cfg.httpClient,
-		UserAgent:  cfg.userAgent,
-		Header:     header,
-	}}, nil
+	return &Client{
+		transport: &transport.Transport{
+			BaseURL:    cfg.baseURL,
+			HTTPClient: cfg.httpClient,
+			UserAgent:  cfg.userAgent,
+			Header:     header,
+		},
+		streamingTransport: &transport.Transport{
+			BaseURL:    cfg.baseURL,
+			HTTPClient: cfg.streamingClient,
+			UserAgent:  cfg.userAgent,
+			Header:     header,
+		},
+	}, nil
 }
 
 // RateLimit is the request quota reported by north. Present is false when the

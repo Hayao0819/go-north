@@ -124,10 +124,48 @@ func TestTransportDo(t *testing.T) {
 	}
 }
 
+func TestTransportOpen(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Header.Get("Accept") != "text/event-stream" {
+			t.Errorf("Accept = %q", request.Header.Get("Accept"))
+		}
+		_, _ = writer.Write([]byte("event: notification\n\n"))
+	}))
+	t.Cleanup(server.Close)
+
+	transport := Transport{BaseURL: server.URL, HTTPClient: server.Client()}
+	response, err := transport.Open(
+		context.Background(),
+		http.MethodGet,
+		"/stream",
+		nil,
+		nil,
+		"",
+		"text/event-stream",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+
+	data, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "event: notification\n\n" {
+		t.Fatalf("body = %q", data)
+	}
+}
+
 func TestNewHTTPClientTimeout(t *testing.T) {
 	t.Parallel()
 
 	if timeout := NewHTTPClient().Timeout; timeout != 30*time.Second {
 		t.Fatalf("timeout = %v", timeout)
+	}
+	if timeout := NewStreamingHTTPClient().Timeout; timeout != 0 {
+		t.Fatalf("streaming timeout = %v", timeout)
 	}
 }

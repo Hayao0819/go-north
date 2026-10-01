@@ -43,6 +43,15 @@ func TestIntegrationReadOnly(t *testing.T) {
 		t.Fatalf("CountPosts returned %d", count)
 	}
 
+	_, response, err = client.Notifications(ctx, NotificationsAll, "")
+	checkIntegrationResponse(t, "Notifications", response, err)
+
+	unread, response, err := client.NotificationUnreadCount(ctx)
+	checkIntegrationResponse(t, "NotificationUnreadCount", response, err)
+	if unread < 0 {
+		t.Fatalf("NotificationUnreadCount returned %d", unread)
+	}
+
 	user, response, err := client.User(ctx, me.Handle)
 	checkIntegrationResponse(t, "User", response, err)
 	if user.ID != me.ID {

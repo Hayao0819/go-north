@@ -12,35 +12,25 @@ import (
 )
 
 // NotificationTab selects a notification feed.
-type NotificationTab string
+type NotificationTab = north.NotificationTab
 
 const (
-	// NotificationsAll includes every notification visible to the account.
-	NotificationsAll NotificationTab = "all"
-	// NotificationsVerified includes notifications from verified accounts.
-	NotificationsVerified NotificationTab = "verified"
-	// NotificationsMentions includes mention, reply, and quote posts.
-	NotificationsMentions NotificationTab = "mentions"
+	NotificationsAll      = north.NotificationsAll
+	NotificationsVerified = north.NotificationsVerified
+	NotificationsMentions = north.NotificationsMentions
 )
 
 // NotificationKind identifies why a notification was created.
-type NotificationKind string
+type NotificationKind = north.NotificationKind
 
 const (
-	// NotificationFollow reports a new follower.
-	NotificationFollow NotificationKind = "FOLLOW"
-	// NotificationLike reports a like.
-	NotificationLike NotificationKind = "LIKE"
-	// NotificationRepost reports a repost.
-	NotificationRepost NotificationKind = "RETWEET"
-	// NotificationPost reports a new-post alert from a followed account.
-	NotificationPost NotificationKind = "POST"
-	// NotificationReply contains a reply post.
-	NotificationReply NotificationKind = "REPLY"
-	// NotificationQuote contains a quote post.
-	NotificationQuote NotificationKind = "QUOTE"
-	// NotificationMention contains a mention post.
-	NotificationMention NotificationKind = "MENTION"
+	NotificationFollow  = north.NotificationFollow
+	NotificationLike    = north.NotificationLike
+	NotificationRepost  = north.NotificationRepost
+	NotificationPost    = north.NotificationPost
+	NotificationReply   = north.NotificationReply
+	NotificationQuote   = north.NotificationQuote
+	NotificationMention = north.NotificationMention
 )
 
 // Notification is one item in the web notification feed.
@@ -50,6 +40,7 @@ type Notification struct {
 	Read        bool             `json:"read"`
 	Actors      []north.User     `json:"actors"`
 	ActorCount  int              `json:"actorCount"`
+	GroupCount  int              `json:"groupCount"`
 	TargetCount int              `json:"targetCount"`
 	CreatedAt   time.Time        `json:"createdAt"`
 	Post        *Post            `json:"tweet"`
