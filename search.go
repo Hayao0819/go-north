@@ -1,10 +1,27 @@
 package north
 
 import (
+	"context"
+	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
 )
+
+// SearchTab is the order used for search results.
+type SearchTab string
+
+const (
+	SearchLatest SearchTab = "latest"
+	SearchTop    SearchTab = "top"
+)
+
+// SearchOptions controls a post search.
+type SearchOptions struct {
+	Tab    SearchTab
+	Cursor string
+}
 
 // SearchFilter controls whether replies or links are required or excluded.
 type SearchFilter uint8
@@ -36,6 +53,27 @@ type SearchQuery struct {
 
 	Since time.Time
 	Until time.Time
+}
+
+// SearchPosts searches public posts. North accepts the same query syntax as
+// its web search, including from:handle and hashtags.
+func (c *Client) SearchPosts(ctx context.Context, query string, opts SearchOptions) (PostPage, *Response, error) {
+	values := url.Values{"q": {query}}
+	if opts.Tab != "" {
+		values.Set("tab", string(opts.Tab))
+	}
+	setCursor(values, opts.Cursor)
+
+	return doData[PostPage](ctx, c, http.MethodGet, "/2/tweets/search", values, nil, "")
+}
+
+// CountPosts returns the number of posts matching query.
+func (c *Client) CountPosts(ctx context.Context, query string) (int, *Response, error) {
+	data, response, err := doData[struct {
+		Count int `json:"count"`
+	}](ctx, c, http.MethodGet, "/2/tweets/counts", url.Values{"q": {query}}, nil, "")
+
+	return data.Count, response, err
 }
 
 // String returns the query in north's search syntax.

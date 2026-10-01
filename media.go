@@ -13,6 +13,59 @@ import (
 	"path/filepath"
 )
 
+// MediaKind is the kind of media attached to a post.
+type MediaKind string
+
+const (
+	MediaPhoto MediaKind = "PHOTO"
+	MediaGIF   MediaKind = "GIF"
+	MediaVideo MediaKind = "VIDEO"
+)
+
+// MediaStatus is the server-side processing state of uploaded media.
+type MediaStatus string
+
+const (
+	MediaPending MediaStatus = "PENDING"
+	MediaReady   MediaStatus = "READY"
+	MediaFailed  MediaStatus = "FAILED"
+)
+
+// MediaWarning is the sensitive-content warning on an attachment.
+type MediaWarning string
+
+const (
+	WarningNudity    MediaWarning = "NUDITY"
+	WarningViolence  MediaWarning = "VIOLENCE"
+	WarningSensitive MediaWarning = "SENSITIVE"
+)
+
+// Media is an uploaded attachment.
+type Media struct {
+	ID           string        `json:"id"`
+	Kind         MediaKind     `json:"kind"`
+	Status       MediaStatus   `json:"status"`
+	URL          string        `json:"url"`
+	ThumbnailURL *string       `json:"thumbnailUrl"`
+	Width        int           `json:"width"`
+	Height       int           `json:"height"`
+	DurationMS   *int64        `json:"durationMs"`
+	AltText      *string       `json:"altText"`
+	Sensitive    bool          `json:"sensitive"`
+	Warning      *MediaWarning `json:"warning"`
+}
+
+// UploadSession starts a chunked media upload.
+type UploadSession struct {
+	UploadID  string `json:"uploadId"`
+	ChunkSize int64  `json:"chunkSize"`
+}
+
+// UploadProgress reports the cumulative bytes accepted for a chunked upload.
+type UploadProgress struct {
+	Received int64 `json:"received"`
+}
+
 // UploadMedia uploads one image, GIF, or video with multipart/form-data.
 // Files over 100 MB must use the chunked upload methods instead.
 func (c *Client) UploadMedia(ctx context.Context, filename string, content io.Reader) (Media, *Response, error) {

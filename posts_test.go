@@ -14,7 +14,7 @@ type seenRequest struct {
 	query  url.Values
 }
 
-func TestPostsAndTimelineEndpoints(t *testing.T) {
+func TestPostEndpoints(t *testing.T) {
 	t.Parallel()
 
 	seen := make(chan seenRequest, 16)
@@ -23,8 +23,6 @@ func TestPostsAndTimelineEndpoints(t *testing.T) {
 		seen <- seenRequest{method: request.Method, path: request.URL.Path, query: request.URL.Query()}
 
 		switch request.URL.Path {
-		case "/api/2/tweets/counts":
-			writeJSON(t, writer, http.StatusOK, `{"data":{"count":42}}`)
 		case "/api/2/tweets/123/like":
 			writeJSON(t, writer, http.StatusOK, `{"data":{"liked":true,"likeCount":4}}`)
 		case "/api/2/tweets/123/retweet":
@@ -67,18 +65,6 @@ func TestPostsAndTimelineEndpoints(t *testing.T) {
 	}
 	assertSeen(t, <-seen, http.MethodPost, "/api/2/tweets", nil)
 
-	page, _, err := client.SearchPosts(ctx, "north #go", SearchOptions{Tab: SearchTop, Cursor: "next"})
-	if err != nil || len(page.Items) != 1 {
-		t.Fatalf("SearchPosts = %#v, %v", page, err)
-	}
-	assertSeen(t, <-seen, http.MethodGet, "/api/2/tweets/search", url.Values{"q": {"north #go"}, "tab": {"top"}, "cursor": {"next"}})
-
-	count, _, err := client.CountPosts(ctx, "from:north")
-	if err != nil || count != 42 {
-		t.Fatalf("CountPosts = %d, %v", count, err)
-	}
-	assertSeen(t, <-seen, http.MethodGet, "/api/2/tweets/counts", url.Values{"q": {"from:north"}})
-
 	post, _, err := client.Post(ctx, "123")
 	if err != nil || post.ID != "123" {
 		t.Fatalf("Post = %#v, %v", post, err)
@@ -96,12 +82,6 @@ func TestPostsAndTimelineEndpoints(t *testing.T) {
 		t.Fatalf("Quotes: %v", err)
 	}
 	assertSeen(t, <-seen, http.MethodGet, "/api/2/tweets/123/quotes", url.Values{"cursor": {"older"}})
-
-	_, _, err = client.HomeTimeline(ctx, TimelineOptions{Ranked: true, Cursor: "more"})
-	if err != nil {
-		t.Fatalf("HomeTimeline: %v", err)
-	}
-	assertSeen(t, <-seen, http.MethodGet, "/api/2/timelines/home", url.Values{"ranked": {"1"}, "cursor": {"more"}})
 
 	like, _, err := client.Like(ctx, "123")
 	if err != nil || !like.Liked || like.LikeCount != 4 {
@@ -140,6 +120,24 @@ func TestPostsBatchLimit(t *testing.T) {
 	}
 	if _, _, err := client.Posts(context.Background(), make([]string, 101)...); err == nil {
 		t.Fatal("101 Posts succeeded")
+	}
+}
+
+func TestDisplayPost(t *testing.T) {
+	t.Parallel()
+
+	original := &Post{ID: "original"}
+	repost := &Post{ID: "repost", RepostOf: original}
+
+	if got := original.DisplayPost(); got != original {
+		t.Errorf("normal DisplayPost = %p, want %p", got, original)
+	}
+	if got := repost.DisplayPost(); got != original {
+		t.Errorf("repost DisplayPost = %p, want %p", got, original)
+	}
+	var missing *Post
+	if got := missing.DisplayPost(); got != nil {
+		t.Errorf("nil DisplayPost = %#v", got)
 	}
 }
 

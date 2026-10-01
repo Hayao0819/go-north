@@ -1,9 +1,39 @@
 package north
 
 import (
+	"context"
+	"net/http"
+	"net/url"
 	"testing"
 	"time"
 )
+
+func TestSearchEndpoints(t *testing.T) {
+	t.Parallel()
+
+	seen := make(chan seenRequest, 2)
+	client := newTestClient(t, func(writer http.ResponseWriter, request *http.Request) {
+		seen <- seenRequest{method: request.Method, path: request.URL.Path, query: request.URL.Query()}
+		if request.URL.Path == "/api/2/tweets/counts" {
+			writeJSON(t, writer, http.StatusOK, `{"data":{"count":42}}`)
+
+			return
+		}
+		writeJSON(t, writer, http.StatusOK, postListEnvelope("search"))
+	})
+
+	page, _, err := client.SearchPosts(context.Background(), "north #go", SearchOptions{Tab: SearchTop, Cursor: "next"})
+	if err != nil || len(page.Items) != 1 {
+		t.Fatalf("SearchPosts = %#v, %v", page, err)
+	}
+	assertSeen(t, <-seen, http.MethodGet, "/api/2/tweets/search", url.Values{"q": {"north #go"}, "tab": {"top"}, "cursor": {"next"}})
+
+	count, _, err := client.CountPosts(context.Background(), "from:north")
+	if err != nil || count != 42 {
+		t.Fatalf("CountPosts = %d, %v", count, err)
+	}
+	assertSeen(t, <-seen, http.MethodGet, "/api/2/tweets/counts", url.Values{"q": {"from:north"}})
+}
 
 func TestSearchQuery(t *testing.T) {
 	t.Parallel()

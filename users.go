@@ -6,7 +6,37 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
+
+// User is a north account. Fields not included by a particular endpoint keep
+// their zero value; nullable profile fields use pointers to preserve null.
+type User struct {
+	ID             string     `json:"id"`
+	Handle         string     `json:"handle"`
+	Name           string     `json:"name"`
+	Bio            *string    `json:"bio"`
+	Location       *string    `json:"location"`
+	Website        *string    `json:"website"`
+	AvatarURL      *string    `json:"avatarUrl"`
+	HeaderURL      *string    `json:"headerUrl"`
+	Protected      bool       `json:"protected"`
+	Verified       bool       `json:"verified"`
+	FollowerCount  int        `json:"followerCount"`
+	FollowingCount int        `json:"followingCount"`
+	PostCount      int        `json:"tweetCount"`
+	CreatedAt      *time.Time `json:"createdAt"`
+	Following      bool       `json:"following"`
+	FollowedBy     bool       `json:"followedBy"`
+	Blocking       bool       `json:"blocking"`
+	Muting         bool       `json:"muting"`
+}
+
+// UserPage is one cursor-paginated page of accounts.
+type UserPage struct {
+	Items      []User  `json:"items"`
+	NextCursor *string `json:"nextCursor"`
+}
 
 // Users fetches up to 100 accounts in the same order as handles. A leading @
 // is accepted by the service.

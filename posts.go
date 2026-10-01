@@ -6,7 +6,124 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
+
+// ReplyPolicy is the audience allowed to reply to a post.
+type ReplyPolicy string
+
+const (
+	ReplyEveryone  ReplyPolicy = "EVERYONE"
+	ReplyFollowing ReplyPolicy = "FOLLOWING"
+	ReplyMentioned ReplyPolicy = "MENTIONED"
+)
+
+// HiddenReason is why a post would normally be hidden.
+type HiddenReason string
+
+const (
+	HiddenMuted   HiddenReason = "muted"
+	HiddenBlocked HiddenReason = "blocked"
+)
+
+// Post is a north post. Quoted and RepostOf are expanded by at most one level
+// by the service.
+type Post struct {
+	ID                string       `json:"id"`
+	Text              string       `json:"text"`
+	CreatedAt         time.Time    `json:"createdAt"`
+	EditedAt          *time.Time   `json:"editedAt"`
+	EditCount         int          `json:"editCount"`
+	Author            User         `json:"author"`
+	ConversationID    string       `json:"conversationId"`
+	ReplyPolicy       ReplyPolicy  `json:"replyPolicy"`
+	Source            string       `json:"source"`
+	InReplyToID       *string      `json:"inReplyToId"`
+	InReplyToHandle   *string      `json:"inReplyToHandle"`
+	Quoted            *Post        `json:"quoted"`
+	RepostOf          *Post        `json:"retweetOf"`
+	LikeCount         int          `json:"likeCount"`
+	RepostCount       int          `json:"retweetCount"`
+	ReplyCount        int          `json:"replyCount"`
+	QuoteCount        int          `json:"quoteCount"`
+	Media             []Media      `json:"media"`
+	Poll              *Poll        `json:"poll"`
+	Liked             bool         `json:"liked"`
+	Reposted          bool         `json:"retweeted"`
+	Bookmarked        bool         `json:"bookmarked"`
+	Deleted           bool         `json:"deleted"`
+	Unavailable       bool         `json:"unavailable"`
+	QuotedUnavailable bool         `json:"quotedUnavailable"`
+	HiddenReason      HiddenReason `json:"hiddenReason"`
+}
+
+// DisplayPost returns the original post for a repost, and the receiver for a
+// normal post. It is useful for clients that render repost attribution around
+// the original content.
+func (p *Post) DisplayPost() *Post {
+	if p != nil && p.RepostOf != nil {
+		return p.RepostOf
+	}
+
+	return p
+}
+
+// Poll is a poll attached to a post.
+type Poll struct {
+	EndsAt  time.Time    `json:"endsAt"`
+	Voted   *int         `json:"voted"`
+	Options []PollOption `json:"options"`
+}
+
+// PollOption is one answer in a poll.
+type PollOption struct {
+	Label string `json:"label"`
+	Votes int    `json:"votes"`
+}
+
+// PostPage is one cursor-paginated page of posts.
+type PostPage struct {
+	Items      []Post  `json:"items"`
+	NextCursor *string `json:"nextCursor"`
+}
+
+// CreatePostRequest is the request body for a new post. Text and Media are
+// individually optional, but the API requires at least one of them.
+type CreatePostRequest struct {
+	Text        string           `json:"text,omitempty"`
+	Media       *CreatePostMedia `json:"media,omitempty"`
+	Reply       *CreatePostReply `json:"reply,omitempty"`
+	QuotePostID string           `json:"quote_tweet_id,omitempty"`
+}
+
+// CreatePostMedia contains IDs returned by a media upload. The API accepts at
+// most four IDs.
+type CreatePostMedia struct {
+	MediaIDs []string `json:"media_ids"`
+}
+
+// CreatePostReply identifies the post being replied to.
+type CreatePostReply struct {
+	InReplyToPostID string `json:"in_reply_to_tweet_id"`
+}
+
+// CreatedPost is the compact response returned after creating a post.
+type CreatedPost struct {
+	ID   string `json:"id"`
+	Text string `json:"text"`
+}
+
+// LikeState is the state after liking or unliking a post.
+type LikeState struct {
+	Liked     bool `json:"liked"`
+	LikeCount int  `json:"likeCount"`
+}
+
+// RepostState is the state after reposting or undoing a repost.
+type RepostState struct {
+	Reposted    bool `json:"retweeted"`
+	RepostCount int  `json:"retweetCount"`
+}
 
 // Posts fetches up to 100 posts in the same order as ids. Inaccessible and
 // missing posts are omitted by the service.
@@ -32,27 +149,6 @@ func (c *Client) CreatePost(ctx context.Context, req CreatePostRequest) (Created
 	return doData[CreatedPost](ctx, c, http.MethodPost, "/2/tweets", nil, body, contentType)
 }
 
-// SearchPosts searches public posts. North accepts the same query syntax as
-// its web search, including from:handle and hashtags.
-func (c *Client) SearchPosts(ctx context.Context, query string, opts SearchOptions) (PostPage, *Response, error) {
-	q := url.Values{"q": {query}}
-	if opts.Tab != "" {
-		q.Set("tab", string(opts.Tab))
-	}
-	setCursor(q, opts.Cursor)
-
-	return doData[PostPage](ctx, c, http.MethodGet, "/2/tweets/search", q, nil, "")
-}
-
-// CountPosts returns the number of posts matching query.
-func (c *Client) CountPosts(ctx context.Context, query string) (int, *Response, error) {
-	data, resp, err := doData[struct {
-		Count int `json:"count"`
-	}](ctx, c, http.MethodGet, "/2/tweets/counts", url.Values{"q": {query}}, nil, "")
-
-	return data.Count, resp, err
-}
-
 // Post fetches one post.
 func (c *Client) Post(ctx context.Context, id string) (Post, *Response, error) {
 	return doData[Post](ctx, c, http.MethodGet, "/2/tweets/"+url.PathEscape(id), nil, nil, "")
@@ -73,17 +169,6 @@ func (c *Client) Quotes(ctx context.Context, id, cursor string) (PostPage, *Resp
 	setCursor(q, cursor)
 
 	return doData[PostPage](ctx, c, http.MethodGet, "/2/tweets/"+url.PathEscape(id)+"/quotes", q, nil, "")
-}
-
-// HomeTimeline returns the caller's chronological or ranked home timeline.
-func (c *Client) HomeTimeline(ctx context.Context, opts TimelineOptions) (PostPage, *Response, error) {
-	q := url.Values{}
-	if opts.Ranked {
-		q.Set("ranked", "1")
-	}
-	setCursor(q, opts.Cursor)
-
-	return doData[PostPage](ctx, c, http.MethodGet, "/2/timelines/home", q, nil, "")
 }
 
 // Like likes a post. Repeating the operation is idempotent.
