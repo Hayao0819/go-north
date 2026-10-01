@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Hayao0819/go-north/internal/transport"
 )
 
 const (
@@ -22,7 +24,6 @@ const (
 	APIVersion = "0.47.0"
 
 	defaultUserAgent = "go-north"
-	maxJSONBody      = 32 << 20
 )
 
 var (
@@ -45,20 +46,12 @@ type clientConfig struct {
 // WithBaseURL sets the API endpoint. It is useful for tests and proxies.
 func WithBaseURL(rawURL string) Option {
 	return func(cfg *clientConfig) error {
-		u, err := url.Parse(rawURL)
+		baseURL, err := transport.NormalizeBaseURL(rawURL)
 		if err != nil {
-			return fmt.Errorf("north: parse base URL: %w", err)
-		}
-		if (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-			return fmt.Errorf("north: base URL must be an absolute HTTP URL")
-		}
-		if u.RawQuery != "" || u.Fragment != "" {
-			return fmt.Errorf("north: base URL must not contain a query or fragment")
+			return fmt.Errorf("north: %w", err)
 		}
 
-		u.Path = strings.TrimRight(u.Path, "/")
-		u.RawPath = ""
-		cfg.baseURL = u.String()
+		cfg.baseURL = baseURL
 		return nil
 	}
 }
@@ -88,10 +81,7 @@ func WithUserAgent(userAgent string) Option {
 // Client calls the north REST API. It is safe for concurrent use when its
 // underlying http.Client is safe for concurrent use.
 type Client struct {
-	token      string
-	baseURL    string
-	httpClient *http.Client
-	userAgent  string
+	transport *transport.Transport
 }
 
 // NewClient returns a client authenticated with token.
@@ -105,11 +95,9 @@ func NewClient(token string, opts ...Option) (*Client, error) {
 	}
 
 	cfg := clientConfig{
-		baseURL: DefaultBaseURL,
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
-		userAgent: defaultUserAgent,
+		baseURL:    DefaultBaseURL,
+		httpClient: transport.NewHTTPClient(),
+		userAgent:  defaultUserAgent,
 	}
 
 	for _, opt := range opts {
@@ -121,12 +109,15 @@ func NewClient(token string, opts ...Option) (*Client, error) {
 		}
 	}
 
-	return &Client{
-		token:      token,
-		baseURL:    cfg.baseURL,
-		httpClient: cfg.httpClient,
-		userAgent:  cfg.userAgent,
-	}, nil
+	header := make(http.Header)
+	header.Set("Authorization", "Bearer "+token)
+
+	return &Client{transport: &transport.Transport{
+		BaseURL:    cfg.baseURL,
+		HTTPClient: cfg.httpClient,
+		UserAgent:  cfg.userAgent,
+		Header:     header,
+	}}, nil
 }
 
 // RateLimit is the request quota reported by north. Present is false when the
@@ -197,69 +188,47 @@ func doData[T any](ctx context.Context, c *Client, method, endpoint string, quer
 }
 
 func jsonRequest(v any) (io.Reader, string, error) {
-	var body bytes.Buffer
-	if err := json.NewEncoder(&body).Encode(v); err != nil {
-		return nil, "", fmt.Errorf("north: encode request: %w", err)
+	body, err := transport.JSONBody(v)
+	if err != nil {
+		return nil, "", fmt.Errorf("north: %w", err)
 	}
 
-	return &body, "application/json", nil
+	return body, "application/json", nil
 }
 
 func (c *Client) do(ctx context.Context, method, endpoint string, query url.Values, body io.Reader, contentType string, out any) (*Response, error) {
-	u, err := url.Parse(c.baseURL + endpoint)
+	result, err := c.transport.Do(ctx, method, endpoint, query, body, contentType)
+	response := newResponse(result)
 	if err != nil {
-		return nil, fmt.Errorf("north: build request URL: %w", err)
-	}
-	if len(query) > 0 {
-		u.RawQuery = query.Encode()
+		if errors.Is(err, transport.ErrResponseTooLarge) {
+			return response, ErrResponseTooLarge
+		}
+
+		return response, fmt.Errorf("north: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, u.String(), body)
-	if err != nil {
-		return nil, fmt.Errorf("north: build request: %w", err)
+	if result.StatusCode < http.StatusOK || result.StatusCode >= http.StatusMultipleChoices {
+		return response, decodeAPIError(result, response)
+	}
+	if out == nil || len(bytes.TrimSpace(result.Body)) == 0 {
+		return response, nil
+	}
+	if err := json.Unmarshal(result.Body, out); err != nil {
+		return response, fmt.Errorf("north: decode response: %w", err)
 	}
 
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.token)
-	if c.userAgent != "" {
-		req.Header.Set("User-Agent", c.userAgent)
-	}
-	if contentType != "" {
-		req.Header.Set("Content-Type", contentType)
-	}
-
-	res, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("north: send request: %w", err)
-	}
-	defer res.Body.Close()
-
-	resp := newResponse(res)
-	b, err := io.ReadAll(io.LimitReader(res.Body, maxJSONBody+1))
-	if err != nil {
-		return resp, fmt.Errorf("north: read response: %w", err)
-	}
-	if len(b) > maxJSONBody {
-		return resp, ErrResponseTooLarge
-	}
-
-	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
-		return resp, decodeAPIError(res, resp, b)
-	}
-	if out == nil || len(bytes.TrimSpace(b)) == 0 {
-		return resp, nil
-	}
-	if err := json.Unmarshal(b, out); err != nil {
-		return resp, fmt.Errorf("north: decode response: %w", err)
-	}
-	return resp, nil
+	return response, nil
 }
 
-func newResponse(resp *http.Response) *Response {
+func newResponse(result transport.Result) *Response {
+	if result.StatusCode == 0 {
+		return nil
+	}
+
 	return &Response{
-		StatusCode: resp.StatusCode,
-		Header:     resp.Header.Clone(),
-		RateLimit:  parseRateLimit(resp.Header),
+		StatusCode: result.StatusCode,
+		Header:     result.Header,
+		RateLimit:  parseRateLimit(result.Header),
 	}
 }
 
@@ -282,22 +251,22 @@ func parseRateLimit(h http.Header) RateLimit {
 	return rate
 }
 
-func decodeAPIError(res *http.Response, resp *Response, body []byte) error {
+func decodeAPIError(result transport.Result, response *Response) error {
 	payload := struct {
 		Errors []ErrorDetail `json:"errors"`
 	}{}
-	_ = json.Unmarshal(body, &payload)
+	_ = json.Unmarshal(result.Body, &payload)
 
-	text := strings.TrimSpace(string(body))
+	text := strings.TrimSpace(string(result.Body))
 	if len(text) > 1024 {
 		text = text[:1024] + "…"
 	}
 
 	return &APIError{
-		StatusCode: res.StatusCode,
-		Status:     res.Status,
+		StatusCode: result.StatusCode,
+		Status:     result.Status,
 		Errors:     payload.Errors,
-		Response:   resp,
+		Response:   response,
 		Body:       text,
 	}
 }

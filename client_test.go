@@ -53,6 +53,7 @@ func TestNewClientValidation(t *testing.T) {
 		{name: "newline token", token: "nth_live_x\n", want: "newline"},
 		{name: "relative URL", token: "token", options: []Option{WithBaseURL("api.example")}, want: "absolute HTTP"},
 		{name: "query in URL", token: "token", options: []Option{WithBaseURL("https://api.example/?x=1")}, want: "query or fragment"},
+		{name: "empty query in URL", token: "token", options: []Option{WithBaseURL("https://api.example/?")}, want: "query or fragment"},
 		{name: "nil HTTP client", token: "token", options: []Option{WithHTTPClient(nil)}, want: "must not be nil"},
 		{name: "newline user agent", token: "token", options: []Option{WithUserAgent("client\nbad")}, want: "newline"},
 	}
