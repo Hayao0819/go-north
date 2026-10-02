@@ -175,13 +175,13 @@ func newLoginClient(opts ...Option) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	if cfg.httpClient.Jar != nil {
+	if cfg.common.HTTPClient.Jar != nil {
 		target := apiURL(baseURL)
-		jar.SetCookies(target, cfg.httpClient.Jar.Cookies(target))
+		jar.SetCookies(target, cfg.common.HTTPClient.Jar.Cookies(target))
 	}
-	httpClient := *cfg.httpClient
+	httpClient := *cfg.common.HTTPClient
 	httpClient.Jar = jar
-	cfg.httpClient = &httpClient
+	cfg.common.HTTPClient = &httpClient
 
 	return configuredClient(cfg, baseURL, webHeaders(baseURL)), nil
 }

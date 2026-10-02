@@ -91,6 +91,8 @@ func TestRequestHeadersBasePathAndRateLimit(t *testing.T) {
 		writer.Header().Set("X-Rate-Limit-Limit", "75")
 		writer.Header().Set("X-Rate-Limit-Remaining", "74")
 		writer.Header().Set("X-Rate-Limit-Reset", "1772500000")
+		writer.Header().Set("X-North-Rate-Limit-Scope", "grant")
+		writer.Header().Set("Retry-After", "3")
 		writeJSON(t, writer, http.StatusOK, `{"data":{"id":"1","handle":"north","name":"North"}}`)
 	})
 
@@ -107,6 +109,9 @@ func TestRequestHeadersBasePathAndRateLimit(t *testing.T) {
 	if response.RateLimit.Limit != 75 || response.RateLimit.Remaining != 74 {
 		t.Errorf("rate limit = %#v", response.RateLimit)
 	}
+	if response.RateLimit.Scope != "grant" || response.RetryAfter != 3*time.Second {
+		t.Errorf("response metadata = %#v", response)
+	}
 	wantReset := time.Unix(1772500000, 0)
 	if !response.RateLimit.Reset.Equal(wantReset) {
 		t.Errorf("reset = %v, want %v", response.RateLimit.Reset, wantReset)
@@ -118,7 +123,7 @@ func TestStructuredAPIError(t *testing.T) {
 
 	client := newTestClient(t, func(writer http.ResponseWriter, _ *http.Request) {
 		writer.Header().Set("X-Rate-Limit-Remaining", "0")
-		writeJSON(t, writer, http.StatusTooManyRequests, `{"errors":[{"code":88,"message":"Rate limit exceeded"}]}`)
+		writeJSON(t, writer, http.StatusTooManyRequests, `{"errors":[{"code":88,"message":"Rate limit exceeded","required_scopes":["posts.read"],"limit_scope":"grant"}],"request_id":"request-1"}`)
 	})
 
 	_, response, err := client.Me(context.Background())
@@ -136,8 +141,41 @@ func TestStructuredAPIError(t *testing.T) {
 	if !apiError.HasCode(88) || apiError.HasCode(34) {
 		t.Errorf("HasCode on %#v", apiError.Errors)
 	}
+	if apiError.RequestID != "request-1" || apiError.Errors[0].LimitScope != "grant" || len(apiError.Errors[0].RequiredScopes) != 1 {
+		t.Errorf("API error metadata = %#v", apiError)
+	}
 	if strings.Contains(err.Error(), "nth_live_test") {
 		t.Errorf("error leaked API token: %v", err)
+	}
+}
+
+func TestIdempotencyKey(t *testing.T) {
+	t.Parallel()
+
+	client := newTestClient(t, func(writer http.ResponseWriter, request *http.Request) {
+		if got := request.Header.Get("Idempotency-Key"); got != "create-1" {
+			t.Errorf("Idempotency-Key = %q", got)
+		}
+		writeJSON(t, writer, http.StatusCreated, `{"data":{"id":"1","text":"hello"}}`)
+	})
+	ctx := WithIdempotencyKey(context.Background(), "create-1")
+	if _, _, err := client.CreatePost(ctx, CreatePostRequest{Text: "hello"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestInvalidIdempotencyKey(t *testing.T) {
+	t.Parallel()
+
+	client, err := NewClient("token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"", "contains space", strings.Repeat("x", 129)} {
+		ctx := WithIdempotencyKey(context.Background(), key)
+		if _, _, err := client.CreatePost(ctx, CreatePostRequest{Text: "hello"}); err == nil {
+			t.Errorf("CreatePost accepted idempotency key %q", key)
+		}
 	}
 }
 

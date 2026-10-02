@@ -20,10 +20,11 @@ var ErrResponseTooLarge = errors.New("response body is too large")
 
 // Transport sends requests with a shared base URL and headers.
 type Transport struct {
-	BaseURL    string
-	HTTPClient *http.Client
-	UserAgent  string
-	Header     http.Header
+	BaseURL     string
+	HTTPClient  *http.Client
+	UserAgent   string
+	Header      http.Header
+	BearerToken func() (string, error)
 }
 
 // Result is the part of an HTTP response needed by the API packages.
@@ -80,8 +81,22 @@ func JSONBody(value any) (io.Reader, error) {
 
 // Do sends one request and reads its response body.
 func (c *Transport) Do(ctx context.Context, method, endpoint string, query url.Values, body io.Reader, contentType string) (Result, error) {
+	return c.DoWithHeader(ctx, method, endpoint, query, body, contentType, nil)
+}
+
+// DoWithHeader sends one request with request-specific headers and reads its
+// response body.
+func (c *Transport) DoWithHeader(
+	ctx context.Context,
+	method string,
+	endpoint string,
+	query url.Values,
+	body io.Reader,
+	contentType string,
+	header http.Header,
+) (Result, error) {
 	var result Result
-	response, err := c.Open(ctx, method, endpoint, query, body, contentType, "application/json")
+	response, err := c.OpenWithHeader(ctx, method, endpoint, query, body, contentType, "application/json", header)
 	if err != nil {
 		return result, err
 	}
@@ -100,6 +115,21 @@ func (c *Transport) Open(
 	contentType string,
 	accept string,
 ) (*http.Response, error) {
+	return c.OpenWithHeader(ctx, method, endpoint, query, body, contentType, accept, nil)
+}
+
+// OpenWithHeader sends one request with request-specific headers and leaves
+// its response body open for the caller.
+func (c *Transport) OpenWithHeader(
+	ctx context.Context,
+	method string,
+	endpoint string,
+	query url.Values,
+	body io.Reader,
+	contentType string,
+	accept string,
+	header http.Header,
+) (*http.Response, error) {
 	u, err := url.Parse(c.BaseURL + endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("build request URL: %w", err)
@@ -117,6 +147,16 @@ func (c *Transport) Open(
 	}
 	for name, values := range c.Header {
 		request.Header[name] = append([]string(nil), values...)
+	}
+	for name, values := range header {
+		request.Header[name] = append([]string(nil), values...)
+	}
+	if c.BearerToken != nil {
+		token, err := c.BearerToken()
+		if err != nil {
+			return nil, fmt.Errorf("get bearer token: %w", err)
+		}
+		request.Header.Set("Authorization", "Bearer "+token)
 	}
 	if c.UserAgent != "" {
 		request.Header.Set("User-Agent", c.UserAgent)
