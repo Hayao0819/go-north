@@ -34,6 +34,7 @@ func (p *Post) DisplayPost() *Post {
 // PublicPost returns the fields shared with the public API representation.
 func (p Post) PublicPost() north.Post {
 	result := p.Post
+	result.EditEligible = p.EditEligible
 	if p.Media != nil {
 		result.Media = make([]north.Media, len(p.Media))
 		for index := range p.Media {
@@ -94,12 +95,21 @@ type Poll struct {
 }
 
 func (p Poll) publicPoll() north.Poll {
-	result := north.Poll{EndsAt: p.EndsAt, Options: make([]north.PollOption, len(p.Options))}
+	result := north.Poll{
+		ID:             p.ID,
+		EndsAt:         p.EndsAt,
+		Ended:          p.Ended,
+		TotalVotes:     p.TotalVotes,
+		ViewerOptionID: p.ViewerOptionID,
+		Options:        make([]north.PollOption, len(p.Options)),
+	}
 	for index, option := range p.Options {
-		result.Options[index] = north.PollOption{Label: option.Label, Votes: option.VoteCount}
-		if p.ViewerOptionID != nil && option.ID == *p.ViewerOptionID {
-			position := option.Position
-			result.Voted = &position
+		result.Options[index] = north.PollOption{
+			ID:        option.ID,
+			Label:     option.Label,
+			Position:  option.Position,
+			VoteCount: option.VoteCount,
+			Percent:   float64(option.Percent),
 		}
 	}
 

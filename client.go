@@ -13,7 +13,7 @@ const (
 	// API requests.
 	DefaultBaseURL = "https://api.north.rip"
 	// APIVersion is the supported north OpenAPI version.
-	APIVersion = "0.47.0"
+	APIVersion = "0.56.1"
 
 	defaultUserAgent = "go-north"
 )
@@ -26,9 +26,11 @@ var ErrTokenRequired = errors.New("north: API token is required")
 type Client struct {
 	transport          *transport.Transport
 	streamingTransport *transport.Transport
+	tokenKind          TokenKind
 }
 
-// NewClient returns a client authenticated with token.
+// NewClient returns a client authenticated with a personal token or legacy API
+// key.
 func NewClient(token string, opts ...Option) (*Client, error) {
 	var err error
 	token, err = normalizeToken(token)
@@ -44,7 +46,7 @@ func NewClient(token string, opts ...Option) (*Client, error) {
 	header := make(http.Header)
 	header.Set("Authorization", "Bearer "+token)
 
-	return newClient(cfg, header, nil), nil
+	return newClient(cfg, header, nil, DetectTokenKind(token)), nil
 }
 
 func normalizeToken(token string) (string, error) {
@@ -59,7 +61,7 @@ func normalizeToken(token string) (string, error) {
 	return token, nil
 }
 
-func newClient(cfg clientConfig, header http.Header, bearerToken func() (string, error)) *Client {
+func newClient(cfg clientConfig, header http.Header, bearerToken func() (string, error), tokenKind TokenKind) *Client {
 	return &Client{
 		transport: &transport.Transport{
 			BaseURL:     cfg.common.BaseURL,
@@ -75,5 +77,6 @@ func newClient(cfg clientConfig, header http.Header, bearerToken func() (string,
 			Header:      header,
 			BearerToken: bearerToken,
 		},
+		tokenKind: tokenKind,
 	}
 }

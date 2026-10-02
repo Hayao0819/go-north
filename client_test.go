@@ -71,6 +71,28 @@ func TestNewClientValidation(t *testing.T) {
 	}
 }
 
+func TestTokenKind(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		token string
+		kind  TokenKind
+	}{
+		{"nth_live_old", TokenLegacy},
+		{"nth_oat_new", TokenScoped},
+		{" test-token ", TokenUnknown},
+	}
+	for _, test := range tests {
+		client, err := NewClient(test.token)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if client.TokenKind() != test.kind || DetectTokenKind(test.token) != test.kind {
+			t.Errorf("token %q: kind = %v", test.token, client.TokenKind())
+		}
+	}
+}
+
 func TestRequestHeadersBasePathAndRateLimit(t *testing.T) {
 	t.Parallel()
 

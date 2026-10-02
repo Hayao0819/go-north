@@ -5,8 +5,9 @@
 > [!WARNING]
 >
 > - north公式のSDKではありません。
+> - `nth_live_`で始まる旧APIキーでは、新しく追加されたAPIを利用できません。
 
-API v0.47.0のポスト、タイムライン、リアクション、ユーザー、フォロー、ブロック、ミュート、メディアアップロード、通知に対応しています。
+API v0.56.1の全エンドポイントに対応しています。
 
 ## インストール
 
@@ -18,7 +19,7 @@ Go 1.21以上が必要です。
 
 ## 使い方
 
-northの「設定 › 開発者向け」でAPIキーを発行します。
+northの「設定 › 開発者向け」で個人トークンを発行します。
 
 ```go
 package main
@@ -62,7 +63,7 @@ nix flake check
 本番APIへの読み取りテストは、`NORTH_API_KEY`を設定したうえで明示的に実行します。
 
 ```bash
-go test -tags=integration -run '^TestIntegrationReadOnly$'
+go test -tags=integration ./...
 ```
 
 ## License

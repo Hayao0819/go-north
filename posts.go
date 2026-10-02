@@ -55,6 +55,7 @@ type Post struct {
 	Unavailable       bool         `json:"unavailable"`
 	QuotedUnavailable bool         `json:"quotedUnavailable"`
 	HiddenReason      HiddenReason `json:"hiddenReason"`
+	EditEligible      bool         `json:"editEligible"`
 }
 
 // DisplayPost returns the original post for a repost, and the receiver for a
@@ -70,15 +71,21 @@ func (p *Post) DisplayPost() *Post {
 
 // Poll is a poll attached to a post.
 type Poll struct {
-	EndsAt  time.Time    `json:"endsAt"`
-	Voted   *int         `json:"voted"`
-	Options []PollOption `json:"options"`
+	ID             string       `json:"id"`
+	EndsAt         time.Time    `json:"endsAt"`
+	Ended          bool         `json:"ended"`
+	TotalVotes     int          `json:"totalVotes"`
+	ViewerOptionID *string      `json:"viewerOptionId"`
+	Options        []PollOption `json:"options"`
 }
 
 // PollOption is one answer in a poll.
 type PollOption struct {
-	Label string `json:"label"`
-	Votes int    `json:"votes"`
+	ID        string  `json:"id"`
+	Label     string  `json:"label"`
+	Position  int     `json:"position"`
+	VoteCount int     `json:"voteCount"`
+	Percent   float64 `json:"percent"`
 }
 
 // PostPage is one cursor-paginated page of posts.
@@ -94,6 +101,13 @@ type CreatePostRequest struct {
 	Media       *CreatePostMedia `json:"media,omitempty"`
 	Reply       *CreatePostReply `json:"reply,omitempty"`
 	QuotePostID string           `json:"quote_tweet_id,omitempty"`
+	Poll        *CreatePoll      `json:"poll,omitempty"`
+}
+
+// CreatePoll describes a poll attached to a new post.
+type CreatePoll struct {
+	Options         []string `json:"options"`
+	DurationMinutes int      `json:"durationMinutes"`
 }
 
 // CreatePostMedia contains IDs returned by a media upload. The API accepts at
@@ -125,6 +139,21 @@ type RepostState struct {
 	RepostCount int  `json:"retweetCount"`
 }
 
+// EditPostRequest is the editable part of a post. A non-nil empty MediaIDs
+// removes every attachment.
+type EditPostRequest struct {
+	Text     *string   `json:"text,omitempty"`
+	MediaIDs *[]string `json:"mediaIds,omitempty"`
+}
+
+// ThreadItem is one post in a new thread.
+type ThreadItem struct {
+	Text        string      `json:"text,omitempty"`
+	MediaIDs    []string    `json:"mediaIds,omitempty"`
+	ReplyPolicy ReplyPolicy `json:"replyPolicy,omitempty"`
+	Poll        *CreatePoll `json:"poll,omitempty"`
+}
+
 // Posts fetches up to 100 posts in the same order as ids. Inaccessible and
 // missing posts are omitted by the service.
 func (c *Client) Posts(ctx context.Context, ids ...string) ([]Post, *Response, error) {
@@ -154,6 +183,30 @@ func (c *Client) Post(ctx context.Context, id string) (Post, *Response, error) {
 	return doData[Post](ctx, c, http.MethodGet, "/2/tweets/"+url.PathEscape(id), nil, nil, "")
 }
 
+// EditPost edits one of the caller's posts.
+func (c *Client) EditPost(ctx context.Context, id string, req EditPostRequest) (Post, *Response, error) {
+	return c.editPost(ctx, id, req, "")
+}
+
+// EditPostIfMatch edits a post only when etag still matches the current
+// version.
+func (c *Client) EditPostIfMatch(ctx context.Context, id string, req EditPostRequest, etag string) (Post, *Response, error) {
+	return c.editPost(ctx, id, req, etag)
+}
+
+func (c *Client) editPost(ctx context.Context, id string, req EditPostRequest, etag string) (Post, *Response, error) {
+	body, contentType, err := jsonRequest(req)
+	if err != nil {
+		return Post{}, nil, err
+	}
+	header := make(http.Header)
+	if etag != "" {
+		header.Set("If-Match", etag)
+	}
+
+	return doDataWithHeader[Post](ctx, c, http.MethodPut, "/2/tweets/"+url.PathEscape(id)+"/edit", nil, body, contentType, header)
+}
+
 // DeletePost deletes one of the caller's posts.
 func (c *Client) DeletePost(ctx context.Context, id string) (bool, *Response, error) {
 	data, resp, err := doData[struct {
@@ -169,6 +222,36 @@ func (c *Client) Quotes(ctx context.Context, id, cursor string) (PostPage, *Resp
 	setCursor(q, cursor)
 
 	return doData[PostPage](ctx, c, http.MethodGet, "/2/tweets/"+url.PathEscape(id)+"/quotes", q, nil, "")
+}
+
+// VotePoll votes for one option in a post's poll.
+func (c *Client) VotePoll(ctx context.Context, id, optionID string) (Post, *Response, error) {
+	body, contentType, err := jsonRequest(struct {
+		OptionID string `json:"optionId"`
+	}{OptionID: optionID})
+	if err != nil {
+		return Post{}, nil, err
+	}
+
+	return doData[Post](ctx, c, http.MethodPost, "/2/tweets/"+url.PathEscape(id)+"/poll/vote", nil, body, contentType)
+}
+
+// CreateThread publishes up to 25 connected posts.
+func (c *Client) CreateThread(ctx context.Context, items []ThreadItem) ([]Post, *Response, error) {
+	if len(items) == 0 || len(items) > 25 {
+		return nil, nil, errors.New("north: CreateThread requires between 1 and 25 items")
+	}
+	body, contentType, err := jsonRequest(struct {
+		Items []ThreadItem `json:"items"`
+	}{Items: items})
+	if err != nil {
+		return nil, nil, err
+	}
+	data, response, err := doData[struct {
+		Items []Post `json:"items"`
+	}](ctx, c, http.MethodPost, "/2/tweets/thread", nil, body, contentType)
+
+	return data.Items, response, err
 }
 
 // Like likes a post. Repeating the operation is idempotent.

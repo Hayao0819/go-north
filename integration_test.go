@@ -59,6 +59,49 @@ func TestIntegrationReadOnly(t *testing.T) {
 	}
 }
 
+func TestIntegrationDMReadOnly(t *testing.T) {
+	token := os.Getenv("NORTH_API_KEY")
+	if token == "" {
+		t.Skip("NORTH_API_KEY is not set")
+	}
+
+	client, err := NewClient(token)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	if client.TokenKind() == TokenLegacy {
+		t.Skip("NORTH_API_KEY is a legacy token")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	conversations, response, err := client.DMConversations(ctx, "", false)
+	checkIntegrationResponse(t, "DMConversations", response, err)
+
+	unread, response, err := client.DMUnreadCount(ctx)
+	checkIntegrationResponse(t, "DMUnreadCount", response, err)
+	if unread < 0 {
+		t.Fatalf("DMUnreadCount returned %d", unread)
+	}
+
+	_, response, err = client.DMConversations(ctx, "", true)
+	checkIntegrationResponse(t, "DMRequests", response, err)
+
+	if len(conversations.Items) == 0 {
+		return
+	}
+	conversation := conversations.Items[0]
+	if conversation.ID == "" {
+		t.Fatal("DMConversations returned an item without an ID")
+	}
+	page, response, err := client.DMMessages(ctx, conversation.ID, "")
+	checkIntegrationResponse(t, "DMMessages", response, err)
+	if page.Conversation.ID != conversation.ID {
+		t.Fatal("DMMessages returned a different conversation")
+	}
+}
+
 func checkIntegrationResponse(t *testing.T, method string, response *Response, err error) {
 	t.Helper()
 	if err != nil {

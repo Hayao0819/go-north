@@ -115,10 +115,6 @@ func doOK(ctx context.Context, c *Client, method, endpoint string, query url.Val
 	return data.OK, response, err
 }
 
-func (c *Client) do(ctx context.Context, method, endpoint string, query url.Values, body io.Reader, contentType string, out any) (*Response, error) {
-	return c.doWithHeader(ctx, method, endpoint, query, body, contentType, nil, out)
-}
-
 func (c *Client) doWithHeader(ctx context.Context, method, endpoint string, query url.Values, body io.Reader, contentType string, header http.Header, out any) (*Response, error) {
 	requestHeader, err := contextHeader(ctx)
 	if err != nil {

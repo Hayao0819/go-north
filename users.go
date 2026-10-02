@@ -2,6 +2,7 @@ package north
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
@@ -38,6 +39,38 @@ type UserPage struct {
 	NextCursor *string `json:"nextCursor"`
 }
 
+// NullableString distinguishes an omitted profile field from a JSON null.
+// Use NewNullableString to set a value and NullString to clear one.
+type NullableString struct {
+	value *string
+}
+
+// NewNullableString returns a profile field containing value.
+func NewNullableString(value string) *NullableString {
+	return &NullableString{value: &value}
+}
+
+// NullString returns a profile field that is encoded as JSON null.
+func NullString() *NullableString {
+	return &NullableString{}
+}
+
+// MarshalJSON implements json.Marshaler.
+func (s NullableString) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.value)
+}
+
+// UpdateProfileRequest contains the mutable account profile fields. Nil fields
+// are not changed.
+type UpdateProfileRequest struct {
+	Name          *string         `json:"name,omitempty"`
+	Bio           *NullableString `json:"bio,omitempty"`
+	Location      *NullableString `json:"location,omitempty"`
+	Website       *NullableString `json:"website,omitempty"`
+	AvatarMediaID *NullableString `json:"avatarMediaId,omitempty"`
+	HeaderMediaID *NullableString `json:"headerMediaId,omitempty"`
+}
+
 // Users fetches up to 100 accounts in the same order as handles. A leading @
 // is accepted by the service.
 func (c *Client) Users(ctx context.Context, handles ...string) ([]User, *Response, error) {
@@ -55,6 +88,16 @@ func (c *Client) Users(ctx context.Context, handles ...string) ([]User, *Respons
 // Me fetches the account that owns the API key.
 func (c *Client) Me(ctx context.Context) (User, *Response, error) {
 	return doData[User](ctx, c, http.MethodGet, "/2/users/me", nil, nil, "")
+}
+
+// UpdateProfile changes the caller's profile.
+func (c *Client) UpdateProfile(ctx context.Context, req UpdateProfileRequest) (User, *Response, error) {
+	body, contentType, err := jsonRequest(req)
+	if err != nil {
+		return User{}, nil, err
+	}
+
+	return doData[User](ctx, c, http.MethodPatch, "/2/users/me", nil, body, contentType)
 }
 
 // User fetches a public account profile.
@@ -95,6 +138,53 @@ func (c *Client) Following(ctx context.Context, handle, cursor string) (UserPage
 	return c.userPage(ctx, handle, "following", cursor)
 }
 
+// BlockedUsers returns accounts blocked by the caller.
+func (c *Client) BlockedUsers(ctx context.Context, cursor string) (UserPage, *Response, error) {
+	return c.viewerUserPage(ctx, "blocked", cursor)
+}
+
+// MutedUsers returns accounts muted by the caller.
+func (c *Client) MutedUsers(ctx context.Context, cursor string) (UserPage, *Response, error) {
+	return c.viewerUserPage(ctx, "muted", cursor)
+}
+
+func (c *Client) viewerUserPage(ctx context.Context, resource, cursor string) (UserPage, *Response, error) {
+	query := url.Values{}
+	setCursor(query, cursor)
+
+	return doData[UserPage](ctx, c, http.MethodGet, "/2/users/me/"+resource, query, nil, "")
+}
+
+// FollowRequests returns pending requests to follow the caller.
+func (c *Client) FollowRequests(ctx context.Context, cursor string) (UserPage, *Response, error) {
+	query := url.Values{}
+	setCursor(query, cursor)
+
+	return doData[UserPage](ctx, c, http.MethodGet, "/2/follow-requests", query, nil, "")
+}
+
+// AcceptFollowRequest accepts a pending follow request.
+func (c *Client) AcceptFollowRequest(ctx context.Context, handle string) (bool, *Response, error) {
+	return c.setFollowRequest(ctx, handle, true)
+}
+
+// RejectFollowRequest rejects a pending follow request.
+func (c *Client) RejectFollowRequest(ctx context.Context, handle string) (bool, *Response, error) {
+	return c.setFollowRequest(ctx, handle, false)
+}
+
+func (c *Client) setFollowRequest(ctx context.Context, handle string, accept bool) (bool, *Response, error) {
+	method := http.MethodDelete
+	if accept {
+		method = http.MethodPost
+	}
+	data, response, err := doData[struct {
+		OK bool `json:"ok"`
+	}](ctx, c, method, "/2/follow-requests/"+escapedHandle(handle), nil, nil, "")
+
+	return data.OK, response, err
+}
+
 func (c *Client) userPage(ctx context.Context, handle, resource, cursor string) (UserPage, *Response, error) {
 	q := url.Values{}
 	setCursor(q, cursor)
@@ -132,6 +222,28 @@ func (c *Client) Unmute(ctx context.Context, handle string) (bool, *Response, er
 	return c.setRelation(ctx, handle, "mute", false)
 }
 
+// EnablePostNotifications enables new-post notifications for an account.
+func (c *Client) EnablePostNotifications(ctx context.Context, handle string) (bool, *Response, error) {
+	return c.setPostNotifications(ctx, handle, true)
+}
+
+// DisablePostNotifications disables new-post notifications for an account.
+func (c *Client) DisablePostNotifications(ctx context.Context, handle string) (bool, *Response, error) {
+	return c.setPostNotifications(ctx, handle, false)
+}
+
+func (c *Client) setPostNotifications(ctx context.Context, handle string, on bool) (bool, *Response, error) {
+	method := http.MethodDelete
+	if on {
+		method = http.MethodPost
+	}
+	data, response, err := doData[struct {
+		OK bool `json:"ok"`
+	}](ctx, c, method, userEndpoint(handle, "account-notifications"), nil, nil, "")
+
+	return data.OK, response, err
+}
+
 func (c *Client) setRelation(ctx context.Context, handle, relation string, on bool) (bool, *Response, error) {
 	method := http.MethodDelete
 	if on {
@@ -146,11 +258,14 @@ func (c *Client) setRelation(ctx context.Context, handle, relation string, on bo
 }
 
 func userEndpoint(handle, resource string) string {
-	handle = strings.TrimPrefix(handle, "@")
-	path := "/2/users/" + url.PathEscape(handle)
+	path := "/2/users/" + escapedHandle(handle)
 	if resource != "" {
 		path += "/" + resource
 	}
 
 	return path
+}
+
+func escapedHandle(handle string) string {
+	return url.PathEscape(strings.TrimPrefix(handle, "@"))
 }

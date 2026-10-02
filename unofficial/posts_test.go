@@ -108,7 +108,7 @@ func TestPostDecodesPublicAndWebFields(t *testing.T) {
 	if len(public.Media) != 1 || public.Media[0].ID != "m1" {
 		t.Fatalf("public media = %#v", public.Media)
 	}
-	if public.Poll == nil || public.Poll.Voted == nil || *public.Poll.Voted != 1 || public.Poll.Options[1].Votes != 3 {
+	if public.Poll == nil || public.Poll.ViewerOptionID == nil || *public.Poll.ViewerOptionID != "o2" || public.Poll.Options[1].VoteCount != 3 {
 		t.Fatalf("public poll = %#v", public.Poll)
 	}
 	if public.Quoted == nil || public.Quoted.ID != "2" || public.RepostOf == nil || public.RepostOf.ID != "3" {

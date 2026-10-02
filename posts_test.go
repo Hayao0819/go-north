@@ -141,6 +141,80 @@ func TestDisplayPost(t *testing.T) {
 	}
 }
 
+func TestNewPostWrites(t *testing.T) {
+	t.Parallel()
+
+	client := newTestClient(t, func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/api/2/tweets/1/edit":
+			if request.Header.Get("If-Match") != `"version-1"` {
+				t.Errorf("If-Match = %q", request.Header.Get("If-Match"))
+			}
+			var body EditPostRequest
+			if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+				t.Fatal(err)
+			}
+			if body.Text == nil || *body.Text != "edited" {
+				t.Errorf("edit body = %#v", body)
+			}
+			writeJSON(t, writer, http.StatusOK, postEnvelope("1"))
+		case "/api/2/tweets/1/poll/vote":
+			var body struct {
+				OptionID string `json:"optionId"`
+			}
+			if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+				t.Fatal(err)
+			}
+			if body.OptionID != "option-2" {
+				t.Errorf("option ID = %q", body.OptionID)
+			}
+			writeJSON(t, writer, http.StatusOK, postEnvelope("1"))
+		case "/api/2/tweets/thread":
+			var body struct {
+				Items []ThreadItem `json:"items"`
+			}
+			if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+				t.Fatal(err)
+			}
+			if len(body.Items) != 2 || body.Items[1].Poll == nil {
+				t.Errorf("thread body = %#v", body)
+			}
+			writeJSON(t, writer, http.StatusCreated, `{"data":{"items":[`+postJSON("1")+`,`+postJSON("2")+`]}}`)
+		default:
+			http.NotFound(writer, request)
+		}
+	})
+	ctx := context.Background()
+	text := "edited"
+	post, _, err := client.EditPostIfMatch(ctx, "1", EditPostRequest{Text: &text}, `"version-1"`)
+	if err != nil || post.ID != "1" {
+		t.Fatalf("EditPostIfMatch = %#v, %v", post, err)
+	}
+	if _, _, err := client.VotePoll(ctx, "1", "option-2"); err != nil {
+		t.Fatalf("VotePoll: %v", err)
+	}
+	items, _, err := client.CreateThread(ctx, []ThreadItem{
+		{Text: "first"},
+		{Text: "second", Poll: &CreatePoll{Options: []string{"yes", "no"}, DurationMinutes: 60}},
+	})
+	if err != nil || len(items) != 2 {
+		t.Fatalf("CreateThread = %#v, %v", items, err)
+	}
+}
+
+func TestPollDecoding(t *testing.T) {
+	t.Parallel()
+
+	var post Post
+	err := json.Unmarshal([]byte(`{"poll":{"id":"poll-1","endsAt":"2026-10-03T00:00:00Z","ended":false,"totalVotes":3,"viewerOptionId":"two","options":[{"id":"one","label":"One","position":0,"voteCount":1,"percent":33.3},{"id":"two","label":"Two","position":1,"voteCount":2,"percent":66.7}]},"editEligible":true}`), &post)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if post.Poll == nil || post.Poll.TotalVotes != 3 || post.Poll.Options[1].VoteCount != 2 || !post.EditEligible {
+		t.Fatalf("post = %#v", post)
+	}
+}
+
 func assertSeen(t *testing.T, request seenRequest, method, path string, query url.Values) {
 	t.Helper()
 
