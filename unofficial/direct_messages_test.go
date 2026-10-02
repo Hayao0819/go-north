@@ -67,15 +67,35 @@ func TestDirectMessageEndpoints(t *testing.T) {
 	})
 }
 
-func TestDMReactionDecodesViewerState(t *testing.T) {
+func TestDMTypesDecodeWebUsers(t *testing.T) {
 	t.Parallel()
 
-	var reaction DMReaction
-	if err := json.Unmarshal([]byte(`{"emoji":"👍","users":[{"id":"u1","handle":"alice"}],"count":1,"reactedByViewer":true}`), &reaction); err != nil {
+	var page DMMessagePage
+	if err := json.Unmarshal([]byte(`{
+		"items":[{
+			"id":"m1",
+			"conversationId":"c1",
+			"sender":{"id":"u1","handle":"alice","avatarOriginalUrl":"/media/alice.png"},
+			"reactions":[{"emoji":"👍","users":[{"id":"u2","handle":"bob","headerVideoUrl":"/media/bob.webm"}],"count":1,"reactedByViewer":true}],
+			"replyTo":{"id":"m0","sender":{"id":"u3","handle":"carol","headerPosterUrl":"/media/carol.png"},"text":"hello","hasMedia":false,"deleted":false}
+		}],
+		"conversation":{"id":"c1","participants":[{"id":"u4","handle":"dave","birthday":{"month":10,"day":2}}]}
+	}`), &page); err != nil {
 		t.Fatal(err)
 	}
-	if !reaction.ReactedByViewer || reaction.Count != 1 || len(reaction.Users) != 1 {
-		t.Fatalf("reaction = %#v", reaction)
+	if len(page.Items) != 1 || page.Items[0].ConversationID != "c1" || page.Items[0].Sender.AvatarOriginalURL == nil {
+		t.Fatalf("message = %#v", page.Items)
+	}
+	reactions := page.Items[0].Reactions
+	if len(reactions) != 1 || !reactions[0].ReactedByViewer || reactions[0].Count != 1 || len(reactions[0].Users) != 1 || reactions[0].Users[0].HeaderVideoURL == nil {
+		t.Fatalf("reactions = %#v", reactions)
+	}
+	reply := page.Items[0].ReplyTo
+	if reply == nil || reply.Sender == nil || reply.Sender.HeaderPosterURL == nil {
+		t.Fatalf("reply = %#v", reply)
+	}
+	if len(page.Conversation.Participants) != 1 || page.Conversation.Participants[0].Birthday == nil {
+		t.Fatalf("conversation = %#v", page.Conversation)
 	}
 }
 

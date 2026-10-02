@@ -41,13 +41,17 @@ func TestUserDecodesWebProfileFields(t *testing.T) {
 	if err := json.Unmarshal([]byte(`{
 		"id":"u1",
 		"handle":"alice",
+		"avatarOriginalUrl":"/media/avatar.png",
+		"headerOriginalUrl":"/media/header.png",
+		"headerVideoUrl":"/media/header.webm",
+		"headerPosterUrl":"/media/header-poster.png",
 		"birthday":{"month":10,"day":1},
 		"birthdayVisibility":{"monthDay":"FOLLOWERS","year":"SELF"},
 		"pinnedTweet":{"id":"p1","media":[]},
 		"followRequested":true,
 		"accountNotifications":true,
 		"retweetsHidden":true,
-		"followersYouKnow":{"users":[{"id":"u2","handle":"bob"}],"count":3},
+		"followersYouKnow":{"users":[{"id":"u2","handle":"bob","avatarOriginalUrl":"/media/bob.png"}],"count":3},
 		"suspended":true,
 		"suspension":{"since":"2026-09-01T00:00:00Z","reason":"policy"}
 	}`), &user); err != nil {
@@ -59,10 +63,17 @@ func TestUserDecodesWebProfileFields(t *testing.T) {
 	if user.BirthdayVisibility == nil || user.BirthdayVisibility.MonthDay != BirthdayVisibilityFollowers || user.BirthdayVisibility.Year != BirthdayVisibilitySelf {
 		t.Fatalf("birthday visibility = %#v", user.BirthdayVisibility)
 	}
+	if user.AvatarOriginalURL == nil || *user.AvatarOriginalURL != "/media/avatar.png" ||
+		user.HeaderOriginalURL == nil || *user.HeaderOriginalURL != "/media/header.png" ||
+		user.HeaderVideoURL == nil || *user.HeaderVideoURL != "/media/header.webm" ||
+		user.HeaderPosterURL == nil || *user.HeaderPosterURL != "/media/header-poster.png" {
+		t.Fatalf("profile media = %#v", user)
+	}
 	if user.PinnedPost == nil || user.PinnedPost.ID != "p1" || !user.FollowRequested || !user.AccountNotifications || !user.RetweetsHidden {
 		t.Fatalf("profile state = %#v", user)
 	}
-	if user.FollowersYouKnow == nil || user.FollowersYouKnow.Count != 3 || len(user.FollowersYouKnow.Users) != 1 {
+	if user.FollowersYouKnow == nil || user.FollowersYouKnow.Count != 3 || len(user.FollowersYouKnow.Users) != 1 ||
+		user.FollowersYouKnow.Users[0].AvatarOriginalURL == nil || *user.FollowersYouKnow.Users[0].AvatarOriginalURL != "/media/bob.png" {
 		t.Fatalf("followers you know = %#v", user.FollowersYouKnow)
 	}
 	if !user.Suspended || user.Suspension == nil || user.Suspension.Since == nil || user.Suspension.Reason == nil || *user.Suspension.Reason != "policy" {

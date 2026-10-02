@@ -59,3 +59,15 @@ func TestNotificationGroupDecodesItemsByKind(t *testing.T) {
 		t.Fatalf("unknown group = %#v", page)
 	}
 }
+
+func TestNotificationDecodesWebActors(t *testing.T) {
+	t.Parallel()
+
+	var notification Notification
+	if err := json.Unmarshal([]byte(`{"id":"n1","kind":"FOLLOW","actors":[{"id":"u1","handle":"alice","avatarOriginalUrl":"/media/alice.png"}],"createdAt":"2026-10-02T00:00:00Z"}`), &notification); err != nil {
+		t.Fatal(err)
+	}
+	if len(notification.Actors) != 1 || notification.Actors[0].AvatarOriginalURL == nil || *notification.Actors[0].AvatarOriginalURL != "/media/alice.png" {
+		t.Fatalf("actors = %#v", notification.Actors)
+	}
+}

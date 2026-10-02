@@ -6,20 +6,18 @@ import (
 	"net/http"
 	"net/url"
 	"time"
-
-	"github.com/Hayao0819/go-north"
 )
 
 // DMConversation describes a direct-message conversation.
 type DMConversation struct {
-	ID           string       `json:"id"`
-	Name         *string      `json:"name"`
-	Group        bool         `json:"group"`
-	Request      bool         `json:"request"`
-	Participants []north.User `json:"participants"`
-	LastMessage  *DMMessage   `json:"lastMessage"`
-	UpdatedAt    time.Time    `json:"updatedAt"`
-	UnreadCount  int          `json:"unreadCount"`
+	ID           string     `json:"id"`
+	Name         *string    `json:"name"`
+	Group        bool       `json:"group"`
+	Request      bool       `json:"request"`
+	Participants []User     `json:"participants"`
+	LastMessage  *DMMessage `json:"lastMessage"`
+	UpdatedAt    time.Time  `json:"updatedAt"`
+	UnreadCount  int        `json:"unreadCount"`
 }
 
 // DMConversationPage is one cursor-paginated conversation page.
@@ -31,34 +29,35 @@ type DMConversationPage struct {
 
 // DMMessage is one direct message.
 type DMMessage struct {
-	ID        string       `json:"id"`
-	Text      string       `json:"text"`
-	Sender    north.User   `json:"sender"`
-	Media     []Media      `json:"media"`
-	Post      *Post        `json:"tweet,omitempty"`
-	CreatedAt time.Time    `json:"createdAt"`
-	EditedAt  *time.Time   `json:"editedAt"`
-	System    bool         `json:"system"`
-	Read      bool         `json:"read"`
-	Reactions []DMReaction `json:"reactions"`
-	ReplyTo   *DMReply     `json:"replyTo"`
+	ID             string       `json:"id"`
+	ConversationID string       `json:"conversationId"`
+	Text           string       `json:"text"`
+	Sender         User         `json:"sender"`
+	Media          []Media      `json:"media"`
+	Post           *Post        `json:"tweet,omitempty"`
+	CreatedAt      time.Time    `json:"createdAt"`
+	EditedAt       *time.Time   `json:"editedAt"`
+	System         bool         `json:"system"`
+	Read           bool         `json:"read"`
+	Reactions      []DMReaction `json:"reactions"`
+	ReplyTo        *DMReply     `json:"replyTo"`
 }
 
 // DMReaction groups one emoji and the accounts that used it.
 type DMReaction struct {
-	Emoji           string       `json:"emoji"`
-	Users           []north.User `json:"users"`
-	Count           int          `json:"count"`
-	ReactedByViewer bool         `json:"reactedByViewer"`
+	Emoji           string `json:"emoji"`
+	Users           []User `json:"users"`
+	Count           int    `json:"count"`
+	ReactedByViewer bool   `json:"reactedByViewer"`
 }
 
 // DMReply is the compact message embedded as a reply target.
 type DMReply struct {
-	ID       string      `json:"id"`
-	Text     string      `json:"text"`
-	Sender   *north.User `json:"sender"`
-	HasMedia bool        `json:"hasMedia"`
-	Deleted  bool        `json:"deleted"`
+	ID       string `json:"id"`
+	Text     string `json:"text"`
+	Sender   *User  `json:"sender"`
+	HasMedia bool   `json:"hasMedia"`
+	Deleted  bool   `json:"deleted"`
 }
 
 // DMMessagePage contains messages and their conversation metadata.

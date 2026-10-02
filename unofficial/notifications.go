@@ -38,7 +38,7 @@ type Notification struct {
 	ID          string           `json:"id"`
 	Kind        NotificationKind `json:"kind"`
 	Read        bool             `json:"read"`
-	Actors      []north.User     `json:"actors"`
+	Actors      []User           `json:"actors"`
 	ActorCount  int              `json:"actorCount"`
 	GroupCount  int              `json:"groupCount"`
 	TargetCount int              `json:"targetCount"`

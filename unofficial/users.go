@@ -37,8 +37,8 @@ type BirthdayVisibilitySettings struct {
 // FollowersYouKnow summarizes accounts followed by the current account that
 // also follow this profile.
 type FollowersYouKnow struct {
-	Users []north.User `json:"users"`
-	Count int          `json:"count"`
+	Users []User `json:"users"`
+	Count int    `json:"count"`
 }
 
 // Suspension contains the available metadata for an account suspension.
@@ -50,6 +50,10 @@ type Suspension struct {
 // User adds profile state returned by the web API to the public user type.
 type User struct {
 	north.User
+	AvatarOriginalURL    *string                     `json:"avatarOriginalUrl"`
+	HeaderOriginalURL    *string                     `json:"headerOriginalUrl"`
+	HeaderVideoURL       *string                     `json:"headerVideoUrl"`
+	HeaderPosterURL      *string                     `json:"headerPosterUrl"`
 	Birthday             *Birthday                   `json:"birthday"`
 	BirthdayVisibility   *BirthdayVisibilitySettings `json:"birthdayVisibility"`
 	PinnedPost           *Post                       `json:"pinnedTweet"`

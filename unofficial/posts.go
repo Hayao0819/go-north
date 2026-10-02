@@ -12,6 +12,7 @@ import (
 // Post adds web-only fields to the public API's post representation.
 type Post struct {
 	north.Post
+	Author             User         `json:"author"`
 	Media              []Media      `json:"media"`
 	Poll               *Poll        `json:"poll"`
 	Quoted             *Post        `json:"quoted"`
@@ -34,6 +35,7 @@ func (p *Post) DisplayPost() *Post {
 // PublicPost returns the fields shared with the public API representation.
 func (p Post) PublicPost() north.Post {
 	result := p.Post
+	result.Author = p.Author.User
 	result.EditEligible = p.EditEligible
 	if p.Media != nil {
 		result.Media = make([]north.Media, len(p.Media))

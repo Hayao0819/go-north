@@ -77,7 +77,7 @@ func TestPostDecodesPublicAndWebFields(t *testing.T) {
 	if err := json.Unmarshal([]byte(`{
 		"id":"1",
 		"text":"hello",
-		"author":{"id":"u","handle":"alice"},
+		"author":{"id":"u","handle":"alice","avatarOriginalUrl":"/media/alice.png","birthday":{"month":10,"day":2}},
 		"media":[{"id":"m1","kind":"PHOTO","status":"READY","url":"/media/1.jpg","errorMessage":"retrying","position":2}],
 		"poll":{"id":"poll","endsAt":"2026-10-02T00:00:00Z","ended":false,"totalVotes":5,"viewerOptionId":"o2","options":[{"id":"o1","label":"one","position":0,"voteCount":2,"percent":40},{"id":"o2","label":"two","position":1,"voteCount":3,"percent":60}]},
 		"quoted":{"id":"2","text":"quoted","author":{"id":"v","handle":"bob"},"media":[],"linkPreview":{"url":"https://example.com","title":null,"description":"example","imageUrl":null,"domain":"example.com","card":"summary"}},
@@ -90,6 +90,9 @@ func TestPostDecodesPublicAndWebFields(t *testing.T) {
 	}
 	if post.ID != "1" || post.Text != "hello" || post.Author.Handle != "alice" || !post.EditEligible || !post.Pinned {
 		t.Fatalf("post = %#v", post)
+	}
+	if post.Author.AvatarOriginalURL == nil || *post.Author.AvatarOriginalURL != "/media/alice.png" || post.Author.Birthday == nil || post.Author.Birthday.Day != 2 {
+		t.Fatalf("post author = %#v", post.Author)
 	}
 	if len(post.Media) != 1 || post.Media[0].Position != 2 || post.Media[0].ErrorMessage == nil || *post.Media[0].ErrorMessage != "retrying" {
 		t.Fatalf("media = %#v", post.Media)
@@ -105,6 +108,9 @@ func TestPostDecodesPublicAndWebFields(t *testing.T) {
 	}
 
 	public := post.PublicPost()
+	if public.Author.ID != "u" || public.Author.Handle != "alice" {
+		t.Fatalf("public author = %#v", public.Author)
+	}
 	if len(public.Media) != 1 || public.Media[0].ID != "m1" {
 		t.Fatalf("public media = %#v", public.Media)
 	}
