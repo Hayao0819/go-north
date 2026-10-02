@@ -8,6 +8,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"golang.org/x/oauth2"
 )
 
 func TestIntegrationReadOnly(t *testing.T) {
@@ -99,6 +101,32 @@ func TestIntegrationDMReadOnly(t *testing.T) {
 	checkIntegrationResponse(t, "DMMessages", response, err)
 	if page.Conversation.ID != conversation.ID {
 		t.Fatal("DMMessages returned a different conversation")
+	}
+}
+
+func TestIntegrationScopedTokenSource(t *testing.T) {
+	token := os.Getenv("NORTH_API_KEY")
+	if token == "" {
+		t.Skip("NORTH_API_KEY is not set")
+	}
+	if DetectTokenKind(token) != TokenScoped {
+		t.Skip("NORTH_API_KEY is not a scoped token")
+	}
+
+	client, err := NewClientWithTokenSource(oauth2.StaticTokenSource(&oauth2.Token{
+		AccessToken: token,
+		TokenType:   "Bearer",
+	}))
+	if err != nil {
+		t.Fatalf("NewClientWithTokenSource: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	me, response, err := client.Me(ctx)
+	checkIntegrationResponse(t, "Me with token source", response, err)
+	if me.ID == "" || me.Handle == "" {
+		t.Fatal("Me returned an incomplete account")
 	}
 }
 

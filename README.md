@@ -15,7 +15,7 @@ API v0.56.1の全エンドポイントに対応しています。
 go get github.com/Hayao0819/go-north
 ```
 
-Go 1.21以上が必要です。
+Go 1.23以上が必要です。
 
 ## 使い方
 
@@ -49,6 +49,41 @@ func main() {
 	}
 }
 ```
+
+## OAuth
+
+配布アプリではDevice FlowまたはPKCEを使います。クライアントシークレットは使用しません。
+
+```go
+func connect(ctx context.Context, save north.SaveTokenFunc) (*north.Client, error) {
+	config := north.NewOAuthConfig(
+		os.Getenv("NORTH_CLIENT_ID"),
+		"",
+		north.ScopePostsRead,
+		north.ScopeUsersRead,
+	)
+	authorization, err := config.DeviceAuth(ctx)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Printf("%s で %s を入力してください\n", authorization.VerificationURI, authorization.UserCode)
+
+	token, err := config.DeviceAccessToken(ctx, authorization)
+	if err != nil {
+		return nil, err
+	}
+	if save != nil {
+		if err := save(token); err != nil {
+			return nil, err
+		}
+	}
+	return north.NewClientWithOAuth(ctx, config, token, save)
+}
+```
+
+`save`には取得時と更新時のトークンをキーリング等へ原子的に保存する関数を渡します。不要なら`nil`も指定できます。
+PKCEでは同じ設定を`golang.org/x/oauth2`の`GenerateVerifier`、`AuthCodeURL`、`Exchange`と共に使います。
+OAuthアクセストークンと個人トークンはどちらも`nth_oat_`で始まります。
 
 仕様は[north APIドキュメント](https://api.north.rip/docs)を参照してください。
 

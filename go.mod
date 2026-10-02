@@ -1,3 +1,5 @@
 module github.com/Hayao0819/go-north
 
-go 1.21
+go 1.23.0
+
+require golang.org/x/oauth2 v0.30.0

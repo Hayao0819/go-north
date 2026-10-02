@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"golang.org/x/oauth2"
 )
 
 func newTestClient(t *testing.T, handler http.HandlerFunc) *Client {
@@ -90,6 +92,48 @@ func TestTokenKind(t *testing.T) {
 		if client.TokenKind() != test.kind || DetectTokenKind(test.token) != test.kind {
 			t.Errorf("token %q: kind = %v", test.token, client.TokenKind())
 		}
+	}
+}
+
+func TestNewClientWithTokenSource(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Header.Get("Authorization") != "Bearer nth_oat_refreshed" {
+			t.Errorf("Authorization = %q", request.Header.Get("Authorization"))
+		}
+		writeJSON(t, writer, http.StatusOK, `{"data":{"id":"1","handle":"north","name":"North"}}`)
+	}))
+	defer server.Close()
+
+	client, err := NewClientWithTokenSource(
+		oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "nth_oat_refreshed", TokenType: "Bearer"}),
+		WithBaseURL(server.URL),
+		WithHTTPClient(server.Client()),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if client.TokenKind() != TokenScoped {
+		t.Fatalf("TokenKind = %v", client.TokenKind())
+	}
+	if _, _, err := client.Me(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestNewClientWithTokenSourceValidation(t *testing.T) {
+	t.Parallel()
+
+	if _, err := NewClientWithTokenSource(nil); !errors.Is(err, ErrTokenSourceRequired) {
+		t.Fatalf("nil token source error = %v", err)
+	}
+	client, err := NewClientWithTokenSource(oauth2.StaticTokenSource(&oauth2.Token{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := client.Me(context.Background()); !errors.Is(err, ErrTokenRequired) {
+		t.Fatalf("empty token error = %v", err)
 	}
 }
 

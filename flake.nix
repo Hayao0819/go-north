@@ -3,7 +3,7 @@
 
     inputs = {
         nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-        nixpkgs-go.url = "github:NixOS/nixpkgs/nixos-24.05";
+        nixpkgs-go.url = "github:NixOS/nixpkgs/nixos-24.11";
         flake-utils.url = "github:numtide/flake-utils";
         treefmt-nix = {
             url = "github:numtide/treefmt-nix";
@@ -26,24 +26,17 @@
                 goPkgs = nixpkgs-go.legacyPackages.${system};
                 treefmtEval = treefmt-nix.lib.evalModule pkgs ./treefmt.nix;
                 goCheck =
-                    name: go: commands:
-                    pkgs.stdenv.mkDerivation {
-                        inherit name;
+                    name: go:
+                    (pkgs.buildGoModule.override { inherit go; }) {
+                        pname = name;
+                        version = "0";
                         src = self;
-                        nativeBuildInputs = [ go ];
-                        dontConfigure = true;
-                        buildPhase = ''
-                            runHook preBuild
-                            export HOME="$TMPDIR/home"
-                            export GOCACHE="$TMPDIR/go-cache"
-                            export GOPATH="$TMPDIR/go"
-                            mkdir -p "$HOME" "$GOCACHE" "$GOPATH"
-                            ${commands}
-                            runHook postBuild
+                        vendorHash = "sha256-RKhBFvK/+EYmCEWiYxbZ2m5xNQGrtHXQofxlIr8RwiM=";
+                        env.CGO_ENABLED = "1";
+                        preCheck = ''
+                            go vet ./...
                         '';
-                        installPhase = ''
-                            mkdir -p "$out"
-                        '';
+                        checkFlags = [ "-race" ];
                     };
             in
             {
@@ -51,19 +44,13 @@
 
                 checks = {
                     formatting = treefmtEval.config.build.check self;
-                    go = goCheck "go-north-check" pkgs.go ''
-                        go vet ./...
-                        CGO_ENABLED=1 go test -race ./...
-                    '';
-                    minimum-go = goCheck "go-north-go-1.21-check" goPkgs.go_1_21 ''
-                        go vet ./...
-                        CGO_ENABLED=1 go test -race ./...
-                    '';
+                    go = goCheck "go-north-check" pkgs.go;
+                    minimum-go = goCheck "go-north-go-1.23-check" goPkgs.go_1_23;
                 };
 
                 devShells.default = pkgs.mkShell {
                     packages = [
-                        goPkgs.go_1_21
+                        goPkgs.go_1_23
                         pkgs.gopls
                         pkgs.go-tools
                         pkgs.delve

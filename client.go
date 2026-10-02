@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Hayao0819/go-north/internal/transport"
+	"golang.org/x/oauth2"
 )
 
 const (
@@ -21,6 +22,10 @@ const (
 // ErrTokenRequired is returned when a client is created without a token.
 var ErrTokenRequired = errors.New("north: API token is required")
 
+// ErrTokenSourceRequired is returned when a client is created without a token
+// source.
+var ErrTokenSourceRequired = errors.New("north: OAuth token source is required")
+
 // Client calls the north REST API. It is safe for concurrent use when its
 // underlying http.Client is safe for concurrent use.
 type Client struct {
@@ -29,8 +34,8 @@ type Client struct {
 	tokenKind          TokenKind
 }
 
-// NewClient returns a client authenticated with a personal token or legacy API
-// key.
+// NewClient returns a client authenticated with an OAuth access token,
+// personal token, or legacy API key.
 func NewClient(token string, opts ...Option) (*Client, error) {
 	var err error
 	token, err = normalizeToken(token)
@@ -47,6 +52,31 @@ func NewClient(token string, opts ...Option) (*Client, error) {
 	header.Set("Authorization", "Bearer "+token)
 
 	return newClient(cfg, header, nil, DetectTokenKind(token)), nil
+}
+
+// NewClientWithTokenSource returns a client whose OAuth access token is
+// refreshed by source.
+func NewClientWithTokenSource(source oauth2.TokenSource, opts ...Option) (*Client, error) {
+	if source == nil {
+		return nil, ErrTokenSourceRequired
+	}
+	cfg, err := configureClient(opts)
+	if err != nil {
+		return nil, err
+	}
+
+	bearerToken := func() (string, error) {
+		token, err := source.Token()
+		if err != nil {
+			return "", err
+		}
+		if token == nil {
+			return "", ErrTokenRequired
+		}
+		return normalizeToken(token.AccessToken)
+	}
+
+	return newClient(cfg, nil, bearerToken, TokenScoped), nil
 }
 
 func normalizeToken(token string) (string, error) {
